@@ -34,7 +34,7 @@ export class LatexExporterConvert {
 
     walkJson(node, options = {}) {
         let start = '', content = '', end = '',
-            placeFootnotesAfterBlock = false, that = this
+            placeFootnotesAfterBlock = false
 
         switch(node.type) {
             case 'article':
@@ -103,6 +103,7 @@ export class LatexExporterConvert {
                     placeFootnotesAfterBlock = true
                     options = _.clone(options)
                     options.onlyFootnoteMarkers = true
+                    options.unplacedFootnotes = []
                 }
                 break
             case 'code':
@@ -120,6 +121,7 @@ export class LatexExporterConvert {
                     placeFootnotesAfterBlock = true
                     options = _.clone(options)
                     options.onlyFootnoteMarkers = true
+                    options.unplacedFootnotes = []
                 }
                 break
             case 'bullet_list':
@@ -184,22 +186,22 @@ export class LatexExporterConvert {
                     let citationEntryKeys = []
 
                     let allCitationItemsPresent = references.map(ref => ref.id).every(
-                        function(citationEntry) {
-                            let bibDBEntry = that.bibDB.db[citationEntry]
+                        citationEntry => {
+                            let bibDBEntry = this.bibDB.db[citationEntry]
                             if (bibDBEntry) {
                                 if (!bibDBEntry) {
                                     // Not present in bibliography database, skip it.
                                     // TODO: Throw an error?
                                     return false
                                 }
-                                if (!that.usedBibDB[citationEntry]) {
-                                    let citationKey = that.createUniqueCitationKey(
+                                if (!this.usedBibDB[citationEntry]) {
+                                    let citationKey = this.createUniqueCitationKey(
                                         bibDBEntry.entry_key
                                     )
-                                    that.usedBibDB[citationEntry] = Object.assign({}, bibDBEntry)
-                                    that.usedBibDB[citationEntry].entry_key = citationKey
+                                    this.usedBibDB[citationEntry] = Object.assign({}, bibDBEntry)
+                                    this.usedBibDB[citationEntry].entry_key = citationKey
                                 }
-                                citationEntryKeys.push(that.usedBibDB[citationEntry].entry_key)
+                                citationEntryKeys.push(this.usedBibDB[citationEntry].entry_key)
                             }
                             return true
                         }
@@ -216,7 +218,7 @@ export class LatexExporterConvert {
 
                     let allCitationItemsPresent = references.every(
                         ref => {
-                            let bibDBEntry = that.bibDB.db[ref.id]
+                            let bibDBEntry = this.bibDB.db[ref.id]
                             if (!bibDBEntry) {
                                 // Not present in bibliography database, skip it.
                                 // TODO: Throw an error?
@@ -234,14 +236,14 @@ export class LatexExporterConvert {
                             }
                             citationCommand += '{'
 
-                            if (!that.usedBibDB[ref.id]) {
-                                let citationKey = that.createUniqueCitationKey(
+                            if (!this.usedBibDB[ref.id]) {
+                                let citationKey = this.createUniqueCitationKey(
                                     bibDBEntry.entry_key
                                 )
-                                that.usedBibDB[ref.id] = Object.assign({}, bibDBEntry)
-                                that.usedBibDB[ref.id].entry_key = citationKey
+                                this.usedBibDB[ref.id] = Object.assign({}, bibDBEntry)
+                                this.usedBibDB[ref.id].entry_key = citationKey
                             }
-                            citationCommand += that.usedBibDB[ref.id].entry_key
+                            citationCommand += this.usedBibDB[ref.id].entry_key
                             citationCommand += '}'
 
                             return true
@@ -305,9 +307,9 @@ export class LatexExporterConvert {
         }
 
         if (node.content) {
-            for (let i=0; i < node.content.length; i++) {
-                content += this.walkJson(node.content[i], options)
-            }
+            node.content.forEach(child => {
+                content += this.walkJson(child, options)
+            })
         }
 
         if (placeFootnotesAfterBlock &&
@@ -317,7 +319,7 @@ export class LatexExporterConvert {
             // This happens in the case of headlines and lists.
             if (options.unplacedFootnotes.length > 1) {
                 end += `\\addtocounter{footnote}{-${(options.unplacedFootnotes.length)}}`
-                options.unplacedFootnotes.forEach(function(footnote){
+                options.unplacedFootnotes.forEach(footnote => {
                     end += '\\stepcounter{footnote}\n'
                     end += '\\footnotetext{'
                     end += this.walkJson(footnote, options)
@@ -354,6 +356,8 @@ export class LatexExporterConvert {
         .replace(/&  \\\\/g, '\\\\')
         // Remove new lines between table cells.
         .replace(/\n & \n\n/g, ' & ')
+        // Remove new lines within itemization
+        .replace(/\\item \n\n/g, '\\item ')
     }
 
     assembleEpilogue() {

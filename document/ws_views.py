@@ -62,19 +62,6 @@ class DocumentWS(BaseWebSocketHandler):
         response = dict()
         response['type'] = 'doc_data'
         response['doc'] = dict()
-        submission = doc_mode(self.doc['id'])
-
-        response['doc']['submission'] = dict()
-        if submission == 'unsubmitted':
-            response['doc']['submission']['status'] = 'unsubmitted'
-        else:
-            response['doc']['submission']['status'] = 'submitted'
-            response['doc']['submission']['submission_id'] = \
-                submission.submission_id
-            response['doc']['submission']['user_id'] = submission.user_id
-            response['doc']['submission']['version_id'] = submission.version_id
-            response['doc']['submission']['journal_id'] = submission.journal_id
-
         response['doc']['id'] = self.doc['id']
         response['doc']['version'] = self.doc['version']
         if self.doc['diff_version'] < self.doc['version']:
@@ -85,10 +72,10 @@ class DocumentWS(BaseWebSocketHandler):
         response['doc']['contents'] = self.doc['contents']
         response['doc']['metadata'] = self.doc['metadata']
         response['doc']['settings'] = self.doc['settings']
-        document_owner = self.doc['db'].owner
+        doc_owner = self.doc['db'].owner
         access_rights = get_accessrights(
             AccessRight.objects.filter(
-                document__owner=document_owner))
+                document__owner=doc_owner))
         response['doc']['access_rights'] = access_rights
 
         if self.user_info.access_rights == 'read-without-comments':
@@ -104,15 +91,15 @@ class DocumentWS(BaseWebSocketHandler):
             response['doc']['comments'] = self.doc["comments"]
         response['doc']['comment_version'] = self.doc["comment_version"]
         response['doc']['access_rights'] = get_accessrights(
-            AccessRight.objects.filter(document__owner=document_owner))
+            AccessRight.objects.filter(document__owner=doc_owner))
         response['doc']['owner'] = dict()
-        response['doc']['owner']['id'] = document_owner.id
-        response['doc']['owner']['name'] = document_owner.readable_name
+        response['doc']['owner']['id'] = doc_owner.id
+        response['doc']['owner']['name'] = doc_owner.readable_name
         response['doc']['owner'][
-            'avatar'] = avatar_url(document_owner, 80)
+            'avatar'] = avatar_url(doc_owner, 80)
         response['doc']['owner']['team_members'] = []
 
-        for team_member in document_owner.leader.all():
+        for team_member in doc_owner.leader.all():
             tm_object = dict()
             tm_object['id'] = team_member.member.id
             tm_object['name'] = team_member.member.readable_name
@@ -132,11 +119,40 @@ class DocumentWS(BaseWebSocketHandler):
                 "last_diffs"][-needed_diffs:]
         else:
             response['doc_info']['unapplied_diffs'] = []
-        if not self.user_info.is_owner:
+        # OJS submission related
+        submission = doc_mode(self.doc['id'])
+        response['doc_info']['submission'] = dict()
+        if submission == 'unsubmitted':
+            response['doc_info']['submission']['status'] = 'unsubmitted'
+        else:
+            response['doc_info']['submission']['status'] = 'submitted'
+            response['doc_info']['submission']['submission_id'] = \
+                submission.submission_id
+            response['doc_info']['submission']['user_id'] = submission.user_id
+            response['doc_info']['submission']['version_id'] = \
+                submission.version_id
+            response['doc_info']['submission']['journal_id'] = \
+                submission.journal_id
+        if self.user_info.is_owner:
+            the_user = self.user_info.user
+            # Data used for OJS submissions
+            response['doc']['owner']['email'] = the_user.email
+            response['doc']['owner']['username'] = the_user.username
+            response['doc']['owner']['first_name'] = the_user.first_name
+            response['doc']['owner']['last_name'] = the_user.last_name
+            response['doc']['owner']['email'] = the_user.email
+        else:
+            the_user = self.user_info.user
             response['user'] = dict()
-            response['user']['id'] = self.user_info.user.id
-            response['user']['name'] = self.user_info.user.readable_name
-            response['user']['avatar'] = avatar_url(self.user_info.user, 80)
+            response['user']['id'] = the_user.id
+            response['user']['name'] = the_user.readable_name
+            response['user']['avatar'] = avatar_url(the_user, 80)
+            # Data used for OJS submissions
+            response['user']['email'] = the_user.email
+            response['user']['username'] = the_user.username
+            response['user']['first_name'] = the_user.first_name
+            response['user']['last_name'] = the_user.last_name
+            response['user']['email'] = the_user.email
         response['doc_info']['session_id'] = self.id
         self.write_message(response)
 

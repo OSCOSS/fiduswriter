@@ -96,17 +96,17 @@ const l_key = ['language']
 
 const f_literal = ['abstract', 'addendum', 'annotation', 'booksubtitle',
     'booktitle', 'booktitleaddon', 'chapter', 'eid', 'entrysubtype',
-    'eprinttype', 'eventtitle', 'howpublished', 'indextitle', 'isan',
-    'isbn', 'ismn', 'isrn', 'issn', 'issue', 'issuesubtitle', 'issuetitle',
-    'iswc', 'journalsubtitle', 'journaltitle', 'label', 'library',
+    'eprinttype', 'eprintclass', 'eventtitle', 'howpublished', 'indextitle',
+    'isan', 'isbn', 'ismn', 'isrn', 'issn', 'issue', 'issuesubtitle',
+    'issuetitle', 'iswc', 'journalsubtitle', 'journaltitle', 'label', 'library',
     'mainsubtitle', 'maintitle', 'maintitleaddon', 'nameaddon', 'note',
     'number', 'origtitle', 'pagetotal', 'part', 'reprinttitle', 'series',
     'shorthand', 'shorthandintro', 'shortjournal', 'shortseries',
     'shorttitle', 'subtitle', 'title', 'titleaddon', 'venue', 'version',
     'volume', 'volumes']
 
-const l_literal = ['eprintclass', 'institution', 'location', 'organization',
-    'origlocation', 'origpublisher', 'publisher']
+const l_literal = ['institution', 'location', 'organization', 'origlocation',
+    'origpublisher', 'publisher']
 
 const f_integer = ['edition']
 
@@ -147,10 +147,22 @@ function reform_l_name(name_string) {
         let name_parts = each_name.split('} {')
         let name_value = {}
         if (name_parts.length > 1) {
-            name_value['family'] = [{'type':'text', 'text': strip_brackets_and_html(name_parts[1])}]
-            name_value['given'] = [{'type':'text', 'text': strip_brackets_and_html(name_parts[0])}]
+            name_value['family'] = []
+            name_value['given'] = []
+            let family_name = strip_brackets_and_html(name_parts[1])
+            if (family_name.length) {
+                name_value['family'].push({'type':'text', 'text': family_name})
+            }
+            let given_name = strip_brackets_and_html(name_parts[0])
+            if (given_name.length) {
+                name_value['given'].push({'type':'text', 'text': given_name})
+            }
         } else {
-            name_value['literal'] = [{'type':'text', 'text': strip_brackets_and_html(name_parts[0])}]
+            name_value['literal'] = []
+            let literal_name = strip_brackets_and_html(name_parts[0])
+            if (literal_name.length) {
+                name_value['literal'].push({'type':'text', 'text': literal_name})
+            }
         }
         names_value.push(name_value)
     })
@@ -159,7 +171,13 @@ function reform_l_name(name_string) {
 
 
 function reform_f_literal(lit_string) {
-    return [{'type':'text', 'text': strip_brackets_and_html(lit_string)}]
+    let cleaned_string = strip_brackets_and_html(lit_string)
+    if (cleaned_string.length) {
+        return [{'type':'text', 'text': cleaned_string}]
+    } else {
+        return []
+    }
+
 }
 
 function reform_l_literal(list_string) {
@@ -252,19 +270,18 @@ export class ImportFidusFile {
 
     init() {
         // Check whether the file is a ZIP-file if check is not disabled.
-        let that = this
         if (this.check === false) {
             this.initZipFileRead()
             return
         }
         // use a BlobReader to read the zip from a Blob object
         let reader = new window.FileReader()
-        reader.onloadend = function() {
+        reader.onloadend = () => {
             if (reader.result.length > 60 && reader.result.substring(0, 2) == 'PK') {
-                that.initZipFileRead()
+                this.initZipFileRead()
             } else {
                 // The file is not a Fidus Writer file.
-                that.callback(false, gettext('The uploaded file does not appear to be a Fidus Writer file.'))
+                this.callback(false, gettext('The uploaded file does not appear to be a Fidus Writer file.'))
                 return
             }
         }
@@ -273,44 +290,42 @@ export class ImportFidusFile {
 
     initZipFileRead() {
         // Extract all the files that can be found in every fidus-file (not images)
-        let that = this
         let zipfs = new JSZip()
-        zipfs.loadAsync(that.file).then(function(){
+        zipfs.loadAsync(this.file).then(() => {
             let filenames = [], p = [], validFile = true
 
-            zipfs.forEach(function(filename){
-                filenames.push(filename)
-            })
+            zipfs.forEach(filename => filenames.push(filename))
 
-            TEXT_FILENAMES.forEach(function(filename){
+            TEXT_FILENAMES.forEach(filename => {
                 if (filenames.indexOf(filename) === -1) {
                     validFile = false
                 }
             })
             if (!validFile) {
-                that.callback(false, gettext('The uploaded file does not appear to be a Fidus Writer file.'))
+                this.callback(
+                    false,
+                    gettext('The uploaded file does not appear to be a Fidus Writer file.')
+                )
                 return false
             }
 
-            filenames.forEach(function(filename){
-                p.push(new Promise(function(resolve){
+            filenames.forEach(filename => {
+                p.push(new Promise(resolve => {
                     let fileType, fileList
                     if (TEXT_FILENAMES.indexOf(filename) !== -1) {
                         fileType = 'string'
-                        fileList = that.textFiles
+                        fileList = this.textFiles
                     } else {
                         fileType = 'blob'
-                        fileList = that.otherFiles
+                        fileList = this.otherFiles
                     }
-                    zipfs.files[filename].async(fileType).then(function(contents){
+                    zipfs.files[filename].async(fileType).then(contents => {
                         fileList.push({filename, contents})
                         resolve()
                     })
                 }))
             })
-            Promise.all(p).then(function(){
-                that.processFidusFile()
-            })
+            Promise.all(p).then(() => this.processFidusFile())
         })
     }
 
